@@ -2,7 +2,7 @@ import React from 'react';
 import { Bot, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { signInWithPopup } from 'firebase/auth';
-import { auth, provider } from '../utils/firebase'; // Ensure path is correct
+import { auth, isFirebaseConfigured, provider } from '../utils/firebase'; // Ensure path is correct
 import { api } from '../utils/api';
 import { useDispatch } from 'react-redux';
 import { setUserData } from '../Redux/userSlice';
@@ -17,6 +17,11 @@ function Auth({isModel = false}) {
 
   const handleGoogleAuth = async () => {
     setAuthError('')
+
+    if (!isFirebaseConfigured || !auth || !provider) {
+      setAuthError('Google sign-in is not configured for this deployment. Add VITE_FIREBASE_APIKEY in GitHub Secrets.')
+      return
+    }
 
     try {
       const response = await signInWithPopup(auth, provider);

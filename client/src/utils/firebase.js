@@ -10,17 +10,19 @@ const firebaseConfig = {
   appId: "1:549689637565:web:3d9ebe590a3a890260d5d4"
 };
 
-if (!firebaseConfig.apiKey) {
+export const isFirebaseConfigured = Boolean(firebaseConfig.apiKey);
+
+if (!isFirebaseConfigured) {
   console.warn("Firebase API key is missing. Set VITE_FIREBASE_APIKEY in client/.env.");
 }
 
 
-const app = initializeApp(firebaseConfig);
+const app = isFirebaseConfigured ? initializeApp(firebaseConfig) : null;
 
 
-export const auth = getAuth(app);
+export const auth = app ? getAuth(app) : null;
 
 
-export const provider = new GoogleAuthProvider();
+export const provider = isFirebaseConfigured ? new GoogleAuthProvider() : null;
 
 export default app;
