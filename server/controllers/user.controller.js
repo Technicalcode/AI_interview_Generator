@@ -1,0 +1,17 @@
+const User = require("../models/user.model");
+
+const getCurrentUser = async (req, res) => {
+    try {
+        const userId = req.userId
+        const user = await User.findById(userId)
+        if(!user){
+            return res.status(404).json({message:"User does not found"})
+        }
+        return res.status(200).json(user)
+    } catch (error) {
+        return res.status(500).json({message:`failed to get currentUser ${error}`})
+    }
+}
+
+
+module.exports = { getCurrentUser };

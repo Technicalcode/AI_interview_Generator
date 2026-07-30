@@ -1,0 +1,27 @@
+{
+  "name": "server",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "check": "node --check index.js && node --check controllers/interview.controller.js && node --check controllers/payment.controller.js && node --check services/openRouter.services.js && node --check middlewares/multer.js && node --check middlewares/rateLimiter.js && node --check models/interview.model.js && node --check models/payment.model.js",
+    "test": "npm run check && node tests/smoke.test.js",
+    "repair:scores": "node scripts/repairScores.js",
+    "dev": "nodemon index.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "axios": "^1.15.0",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "dotenv": "^17.3.1",
+    "express": "^5.2.1",
+    "jsonwebtoken": "^9.0.3",
+    "mongoose": "^9.2.2",
+    "multer": "^2.1.1",
+    "nodemon": "^3.1.14",
+    "pdfjs-dist": "^5.6.205"
+  }
+}
