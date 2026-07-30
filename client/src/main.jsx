@@ -9,7 +9,7 @@ import store from './Redux/store.js'
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <BrowserRouter>
+    <BrowserRouter basename="/AI_interview_Generator">
     <Provider store={store}>
        <App />
     </Provider>
