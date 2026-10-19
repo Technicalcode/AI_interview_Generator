@@ -14,13 +14,23 @@ const app = express();
 
 const allowedOrigins = [
     process.env.FRONTEND_URL,
+    "https://technicalcode.github.io",
     "http://localhost:5173",
     "http://127.0.0.1:5173"
 ].filter(Boolean);
 
+const isAllowedLocalOrigin = (origin) => {
+    try {
+        const { hostname, protocol } = new URL(origin);
+        return protocol === "http:" && ["localhost", "127.0.0.1"].includes(hostname);
+    } catch {
+        return false;
+    }
+};
+
 app.use(cors({
     origin: (origin, callback) => {
-        if (!origin || allowedOrigins.includes(origin)) {
+        if (!origin || allowedOrigins.includes(origin) || isAllowedLocalOrigin(origin)) {
             return callback(null, true);
         }
 

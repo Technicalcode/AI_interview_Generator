@@ -18,14 +18,42 @@ const extractJson = (content) => {
 };
 
 const fallbackQuestion = ({ role, experience, type }, questionNumber = 1) => {
-  const prompts = {
-    hr: `Tell me about a time you handled a challenging situation while working as a ${role}.`,
-    technical: `Explain one important ${role} concept you have used in a real project.`,
-    resume: `Pick one project from your resume and explain your exact contribution, challenges, and result.`,
-    mixed: `For a ${experience} ${role} role, explain a project or experience that proves you are ready for this job.`
+  const pools = {
+    hr: [
+      `Tell me about yourself and why you chose a career as a ${role}.`,
+      `Describe a time you faced a conflict in a team. How did you resolve it?`,
+      `What are your greatest strengths and how have you applied them as a ${role}?`,
+      `Where do you see yourself in 5 years in your ${role} career?`,
+      `Describe a situation where you had to meet a tight deadline. How did you manage it?`,
+      `Tell me about a time you received critical feedback. How did you respond?`
+    ],
+    technical: [
+      `Explain one key technical concept in ${role} that you have used in a real project.`,
+      `Describe a challenging technical problem you solved. What was your approach?`,
+      `How do you ensure code quality and maintainability in your projects as a ${role}?`,
+      `Walk me through how you would design a scalable system for a high-traffic application.`,
+      `What debugging strategies do you use when you encounter a difficult bug?`,
+      `Explain a performance optimization you made in a past project and its measurable impact.`
+    ],
+    resume: [
+      `Pick one project from your resume and explain your exact contribution, challenges, and result.`,
+      `What was the most technically complex part of a project you have worked on? How did you handle it?`,
+      `Describe a project where you had to learn a new technology quickly. What was your approach?`,
+      `Tell me about a project that did not go as planned. What went wrong and what did you learn?`,
+      `Which project from your resume are you most proud of and why?`,
+      `Describe a project where you collaborated with a team. What was your specific role and contribution?`
+    ],
+    mixed: [
+      `Tell me about yourself and your journey as a ${experience} ${role}.`,
+      `Describe your most impactful project — your contribution, the challenge, and the result.`,
+      `How do you stay updated with the latest technologies relevant to ${role}?`,
+      `Walk me through a difficult technical decision you made in a past project.`,
+      `Describe a time you worked under pressure. How did you handle it and what was the outcome?`
+    ]
   };
 
-  return prompts[type] || prompts.mixed || `Question ${questionNumber}: Tell me about your experience as a ${role}.`;
+  const pool = pools[type] || pools.mixed;
+  return pool[(questionNumber - 1) % pool.length];
 };
 
 const normalizeList = (value, fallback = []) => Array.isArray(value)
@@ -71,52 +99,137 @@ const buildReport = (interview) => {
 
 const createQuestionWithAi = async (interview) => {
   const questionNumber = interview.answers.length + 1;
+  const previousQuestions = interview.answers.map((item) => item.question);
+
+  const resumeContext = interview.resume
+    ? `Candidate Resume Info:
+- Role: ${interview.resume.role || interview.role}
+- Experience: ${interview.resume.experience || interview.experience}
+- Projects: ${(interview.resume.projects || []).join(", ") || "Not specified"}
+- Skills: ${(interview.resume.skills || []).join(", ") || "Not specified"}`
+    : `Role: ${interview.role}, Experience: ${interview.experience}`;
+
   const messages = [
     {
       role: "system",
-      content: `You create concise interview questions. Return strict JSON only:
+      content: `You are an expert technical interviewer. Generate ONE unique interview question for question number ${questionNumber} of ${interview.maxQuestions}.
+
+${resumeContext}
+Interview Type: ${interview.type}
+Difficulty: ${interview.difficulty}
+
+STRICT RULES:
+1. NEVER repeat or rephrase any of these already asked questions: ${previousQuestions.length > 0 ? previousQuestions.map((q, i) => `Q${i + 1}: "${q}"`).join("; ") : "None yet"}
+2. Ask about DIFFERENT topics each time — vary between: specific projects from resume, technical skills, system design, behavioral scenarios, problem-solving, and experience.
+3. For question ${questionNumber}, focus on: ${getQuestionFocus(interview.type, questionNumber, interview.maxQuestions)}
+4. Make the question specific to the candidate's resume/skills listed above.
+5. Keep it concise — one clear question only.
+
+Return strict JSON only:
 {
-  "question": "one clear question"
+  "question": "your unique question here"
 }`
     },
     {
       role: "user",
-      content: JSON.stringify({
-        role: interview.role,
-        experience: interview.experience,
-        type: interview.type,
-        difficulty: interview.difficulty,
-        questionNumber,
-        previousQuestions: interview.answers.map((item) => item.question),
-        resume: interview.resume
-      })
+      content: `Generate question ${questionNumber} for this ${interview.type} interview. Make it completely different from previous questions.`
     }
   ];
 
   try {
     const response = await askAi(messages);
     const parsed = readJson(response, {});
-    return parsed.question || fallbackQuestion(interview, questionNumber);
-  } catch {
+    const question = parsed.question?.trim();
+    // Make sure it's not a duplicate
+    if (question && !previousQuestions.some(q => q.toLowerCase().includes(question.toLowerCase().slice(0, 30)))) {
+      return question;
+    }
+    return fallbackQuestion(interview, questionNumber);
+  } catch (error) {
+    console.error("createQuestionWithAi error:", error.message);
     return fallbackQuestion(interview, questionNumber);
   }
 };
 
+const getQuestionFocus = (type, questionNumber, maxQuestions) => {
+  const position = questionNumber / maxQuestions;
+  if (type === "hr") {
+    const hrFocus = ["background and motivation", "teamwork and collaboration", "conflict resolution", "career goals", "strengths and weaknesses", "leadership experience"];
+    return hrFocus[(questionNumber - 1) % hrFocus.length];
+  }
+  if (type === "technical") {
+    const techFocus = ["a specific technical project", "system design or architecture", "a technical challenge solved", "coding concepts or algorithms", "debugging experience", "performance optimization"];
+    return techFocus[(questionNumber - 1) % techFocus.length];
+  }
+  if (type === "resume") {
+    const resumeFocus = ["a specific project contribution and result", "a challenge faced in a project", "technical decisions made", "collaboration and teamwork in projects", "project impact and outcome"];
+    return resumeFocus[(questionNumber - 1) % resumeFocus.length];
+  }
+  // mixed
+  if (position <= 0.3) return "background, motivation, and role fit";
+  if (position <= 0.6) return "a specific technical project or skill from resume";
+  if (position <= 0.8) return "system design or a real technical challenge";
+  return "career goals and future plans";
+};
+
+
+const isGarbageAnswer = (answer) => {
+  const trimmed = answer.trim();
+  // Too short (less than 3 words or less than 10 characters)
+  const wordCount = trimmed.split(/\s+/).filter(Boolean).length;
+  if (wordCount < 3 || trimmed.length < 10) return true;
+  // Only symbols/numbers/punctuation, no real words
+  const hasRealWords = /[a-zA-Z]{3,}/.test(trimmed);
+  if (!hasRealWords) return true;
+  // Single generic filler words like "ok", "yes", "no", "idk"
+  const fillerOnly = /^(ok|okay|yes|no|nope|idk|sure|hmm|uh|um|fine|done|good|bad|maybe|lol|haha|na|nah|hello|hi|hey)$/i.test(trimmed);
+  if (fillerOnly) return true;
+  return false;
+};
+
 const evaluateAnswerWithAi = async ({ interview, question, answer }) => {
-  const fallbackScore = Math.min(85, Math.max(45, answer.trim().split(/\s+/).length * 3));
+  // Immediately reject garbage/nonsense answers without calling AI
+  if (isGarbageAnswer(answer)) {
+    return {
+      score: 0,
+      feedback: "The answer does not address the question at all. Please provide a meaningful and relevant response.",
+      strengths: [],
+      improvements: ["Answer the question with relevant content", "Provide specific examples and details", "Structure your response clearly"]
+    };
+  }
+
+  const wordCount = answer.trim().split(/\s+/).filter(Boolean).length;
+  // Fallback score is low — only meaningful correct answers earn points via AI
+  const fallbackScore = 0;
 
   const messages = [
     {
       role: "system",
-      content: `Evaluate an interview answer. Return strict JSON only:
+      content: `You are a very strict interview evaluator. Your job is to score the candidate's answer ONLY if it is BOTH:
+1. RELEVANT — directly addresses the interview question asked.
+2. MEANINGFUL — contains real knowledge, specific details, or genuine examples. Not vague, filler, or copied fluff.
+
+Return strict JSON only:
 {
   "score": 0,
-  "feedback": "short feedback",
-  "strengths": ["strength"],
-  "improvements": ["improvement"]
+  "feedback": "brief feedback in 1-2 sentences",
+  "strengths": ["strength1"],
+  "improvements": ["improvement1"]
 }
 
-Important: score must be on a 0-100 scale, not 0-10.`
+STRICT Scoring rules (0–100 scale):
+- Score 0: Answer is irrelevant to the question, random text, off-topic, filler, gibberish, or nonsense. ZERO score — no exceptions.
+- Score 1–20: Answer is very loosely related but contains no real substance, knowledge, or examples.
+- Score 21–40: Answer is partially on-topic but vague, missing core details, or very generic.
+- Score 41–60: Answer is relevant and shows some understanding, but lacks examples or depth.
+- Score 61–80: Good answer — relevant, shows knowledge, gives some examples. Minor gaps.
+- Score 81–100: Excellent — highly relevant, correct, detailed with specific examples and clear structure.
+
+⚠ CRITICAL RULES:
+- If the answer does NOT clearly address the question asked, give score = 0.
+- Do NOT reward length. A long irrelevant answer still gets 0.
+- Do NOT give any score for generic answers like "I have experience in this" or "I know how to do this" with no detail.
+- Score must reflect CORRECTNESS and RELEVANCE to THIS specific question, not effort.`
     },
     {
       role: "user",
@@ -133,18 +246,20 @@ Important: score must be on a 0-100 scale, not 0-10.`
   try {
     const response = await askAi(messages);
     const parsed = readJson(response, {});
+    const aiScore = normalizeScore(parsed.score, fallbackScore);
     return {
-      score: normalizeScore(parsed.score, fallbackScore),
-      feedback: parsed.feedback || "Good attempt. Add more concrete examples and measurable impact to strengthen the answer.",
-      strengths: normalizeList(parsed.strengths, ["Relevant answer"]),
-      improvements: normalizeList(parsed.improvements, ["Use a clearer structure", "Add specific examples"])
+      score: aiScore,
+      feedback: parsed.feedback || "Answer was not relevant or meaningful enough to earn a score. Please address the question directly with specific examples.",
+      strengths: normalizeList(parsed.strengths, aiScore > 40 ? ["Attempted the question"] : []),
+      improvements: normalizeList(parsed.improvements, ["Answer the question directly", "Add specific examples and details"])
     };
-  } catch {
+  } catch (error) {
+    console.error("evaluateAnswerWithAi error:", error.message);
     return {
       score: fallbackScore,
-      feedback: "Good attempt. Add more concrete examples, context, and outcomes to make the answer stronger.",
-      strengths: ["Relevant answer"],
-      improvements: ["Use a clearer structure", "Add specific examples"]
+      feedback: "Could not evaluate the answer automatically. Please ensure your answer is clear and relevant to the question.",
+      strengths: [],
+      improvements: ["Answer the question directly", "Add specific examples and details"]
     };
   }
 };
@@ -281,6 +396,11 @@ const submitAnswer = async (req, res) => {
 
     if (!cleanAnswer) {
       return res.status(400).json({ message: "Answer is required" });
+    }
+
+    const wordCount = cleanAnswer.split(/\s+/).filter(Boolean).length;
+    if (wordCount > 200) {
+      return res.status(400).json({ message: `Answer must be 200 words or less. Your answer has ${wordCount} words.` });
     }
 
     const interview = await Interview.findOne({ _id: interviewId, user: req.userId });

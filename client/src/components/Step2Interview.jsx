@@ -14,9 +14,17 @@ function Step2Interview({ interviewData, onFinish, onUpdate }) {
     return { done, total, percent: Math.round((done / total) * 100) }
   }, [interviewData])
 
+  const wordCount = answer.trim() ? answer.trim().split(/\s+/).filter(Boolean).length : 0
+  const isOverLimit = wordCount > 200
+
   const submitAnswer = async () => {
     if (!answer.trim()) {
       setError('Please write an answer before submitting.')
+      return
+    }
+
+    if (isOverLimit) {
+      setError(`Answer must be 200 words or less. Currently ${wordCount} words.`)
       return
     }
 
@@ -111,7 +119,9 @@ function Step2Interview({ interviewData, onFinish, onUpdate }) {
           </label>
 
           <div className='mt-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between'>
-            <p className='text-sm text-gray-500'>{answer.trim().split(/\s+/).filter(Boolean).length} words</p>
+            <p className={`text-sm font-medium ${isOverLimit ? 'text-red-600' : wordCount > 170 ? 'text-yellow-600' : 'text-gray-500'}`}>
+              {wordCount}/200 words{isOverLimit && ' — over limit!'}
+            </p>
             <button
               type='button'
               onClick={submitAnswer}

@@ -3,7 +3,7 @@ import { Bot, Sparkles } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { signInWithPopup } from 'firebase/auth';
 import { auth, isFirebaseConfigured, provider } from '../utils/firebase'; // Ensure path is correct
-import { api } from '../utils/api';
+import { api, isServerConfigured, readApiError } from '../utils/api';
 import { useDispatch } from 'react-redux';
 import { setUserData } from '../Redux/userSlice';
 import { useNavigate } from 'react-router-dom';
@@ -23,6 +23,11 @@ function Auth({isModel = false}) {
       return
     }
 
+    if (!isServerConfigured) {
+      setAuthError('Backend server URL is not configured for this deployment. Add VITE_SERVER_URL in GitHub Secrets.')
+      return
+    }
+
     try {
       const response = await signInWithPopup(auth, provider);
       let User = response.user
@@ -32,7 +37,7 @@ function Auth({isModel = false}) {
       dispatch(setUserData(result.data))
       navigate('/')
     } catch (error) {
-      const message = error.response?.data?.message || error.message || "Unable to sign in right now.";
+      const message = readApiError(error, "Unable to sign in right now.");
       console.error("Auth Error:", message);
       setAuthError(message);
       dispatch(setUserData(null))
